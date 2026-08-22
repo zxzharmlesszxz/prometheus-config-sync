@@ -42,13 +42,14 @@ make ci
 - `make ci` додає security scans, Docker smoke типового image і повний
   локальний black-box suite.
 
-Для локального запуску потрібні `golangci-lint` v2.12.2, Docker із Compose v2, Helm,
-ShellCheck, jq, Python 3 та actionlint. GitHub Actions сам готує Go/Helm
+Для локального запуску потрібні `golangci-lint` v2.12.2, зібраний Go 1.27.0,
+Docker із Compose v2, Helm, ShellCheck, jq, Python 3 та actionlint. GitHub Actions
+сам готує Go/Helm
 toolchains і запускає ту саму pinned версію golangci-lint.
 Для повного локального parity додайте доступ до Docker socket для image/build
 цілей та writable кеш `golangci-lint` (через `GOLANGCI_LINT_CACHE` або еквівалент).
 
-Go toolchain проєкту — 1.26.6. Binary створюється у `dist/prometheus-config-sync`:
+Go toolchain проєкту — 1.27.0. Binary створюється у `dist/prometheus-config-sync`:
 
 ```bash
 ./dist/prometheus-config-sync \

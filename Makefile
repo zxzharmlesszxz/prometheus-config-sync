@@ -32,7 +32,9 @@ vet: ## Run go vet.
 	$(GO) vet ./...
 
 lint-version: ## Require the project golangci-lint version.
-	@version="$$($(GOLANGCI_LINT) version)"; echo "$$version" | grep -F "version $(patsubst v%,%,$(GOLANGCI_LINT_VERSION)) " >/dev/null || { echo "required golangci-lint $(GOLANGCI_LINT_VERSION), got: $$version"; exit 1; }
+	@version="$$($(GOLANGCI_LINT) version)"; \
+	echo "$$version" | grep -F "version $(patsubst v%,%,$(GOLANGCI_LINT_VERSION)) " >/dev/null || { echo "required golangci-lint $(GOLANGCI_LINT_VERSION), got: $$version"; exit 1; }; \
+	echo "$$version" | grep -F "built with go$(GO_VERSION) " >/dev/null || { echo "required golangci-lint built with go$(GO_VERSION), got: $$version"; exit 1; }
 
 lint: lint-version ## Run golangci-lint.
 	PATH="$(dir $(GO)):$$PATH" $(GOLANGCI_LINT) run ./...

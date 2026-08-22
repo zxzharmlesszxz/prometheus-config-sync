@@ -6,7 +6,7 @@ on:
     inputs:
       go-version:
         type: string
-        default: "1.26.6"
+        default: "1.27.0"
       run-build:
         type: boolean
         default: false
@@ -49,6 +49,7 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.12.2
+          install-mode: goinstall
       - name: Install actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
       - name: Delivery source checks

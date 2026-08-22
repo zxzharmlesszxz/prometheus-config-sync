@@ -1,5 +1,6 @@
 GO ?= go
 GOFMT ?= gofmt
+GO_VERSION ?= 1.27.0
 GOLANGCI_LINT ?= golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.12.2
 GOVULNCHECK_VERSION ?= v1.6.0
