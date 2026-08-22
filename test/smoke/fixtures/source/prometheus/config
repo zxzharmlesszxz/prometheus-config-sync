@@ -1,0 +1,6 @@
+scrape_configs:
+  - job_name: generated-config-sync
+    static_configs:
+      - targets: ["config-sync:9534"]
+        labels:
+          source: generated

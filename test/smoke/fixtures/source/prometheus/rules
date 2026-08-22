@@ -1,0 +1,5 @@
+groups:
+  - name: generated-config-sync-example
+    rules:
+      - record: prometheus_config_sync:up
+        expr: max(up{job="prometheus-config-sync"})

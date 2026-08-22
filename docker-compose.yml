@@ -1,0 +1,191 @@
+services:
+  generated-init:
+    image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+    command:
+      - sh
+      - -ec
+      - |
+        mkdir -p /generated/rules
+        rm -f /generated/.prometheus-config-sync-applied.sha256
+        chown -R 10001:10001 /generated
+        chmod 0755 /generated /generated/rules
+    volumes:
+      - prometheus_generated:/generated
+    restart: "no"
+
+  source:
+    image: ${SMOKE_TEST_IMAGE:-prometheus-config-sync-smoke-test}
+    build:
+      context: .
+      dockerfile: test/smoke/Dockerfile
+    command: ["python", "/smoke/source.py"]
+    ports:
+      - "127.0.0.1:${SOURCE_PORT:-9876}:9876"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9876/prometheus/config"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      generated-init:
+        condition: service_completed_successfully
+    configs:
+      - source: prometheus_base_config
+        target: /etc/prometheus/prometheus.yml
+      - source: prometheus_config_sync_alerts
+        target: /etc/prometheus/rules/prometheus-config-sync.yml
+    volumes:
+      - prometheus_data:/prometheus
+      - prometheus_generated:/etc/prometheus/generated:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  config-sync:
+    build:
+      context: .
+      args:
+        LDFLAGS: ${LDFLAGS:-}
+    image: prometheus-config-sync:local
+    depends_on:
+      source:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    environment:
+      PROMETHEUS_CONFIG_SYNC_SOURCE_URL: http://source:9876
+      PROMETHEUS_CONFIG_SYNC_SOURCE_TOKEN: ${PROMETHEUS_CONFIG_SYNC_SOURCE_TOKEN:-}
+      PROMETHEUS_CONFIG_SYNC_PROMETHEUS_RELOAD_URL: http://prometheus:9090/-/reload
+      PROMETHEUS_CONFIG_SYNC_OUTPUT_DIR: /etc/prometheus/generated
+      PROMETHEUS_CONFIG_SYNC_PROMTOOL_PATH: /usr/local/bin/promtool
+      PROMETHEUS_CONFIG_SYNC_INTERVAL: ${PROMETHEUS_CONFIG_SYNC_INTERVAL:-2s}
+      PROMETHEUS_CONFIG_SYNC_HTTP_TIMEOUT: ${PROMETHEUS_CONFIG_SYNC_HTTP_TIMEOUT:-10s}
+      PROMETHEUS_CONFIG_SYNC_VALIDATION_TIMEOUT: ${PROMETHEUS_CONFIG_SYNC_VALIDATION_TIMEOUT:-30s}
+      PROMETHEUS_CONFIG_SYNC_MAX_CONFIG_BYTES: ${PROMETHEUS_CONFIG_SYNC_MAX_CONFIG_BYTES:-10485760}
+      PROMETHEUS_CONFIG_SYNC_MAX_RULES_BYTES: ${PROMETHEUS_CONFIG_SYNC_MAX_RULES_BYTES:-10485760}
+      PROMETHEUS_CONFIG_SYNC_WEB_LISTEN_ADDRESS: :9534
+      PROMETHEUS_CONFIG_SYNC_WEB_METRICS_PATH: /metrics
+    volumes:
+      - prometheus_generated:/etc/prometheus/generated
+    ports:
+      - "127.0.0.1:${CONFIG_SYNC_PORT:-9534}:9534"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9534/livez"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/grafana:13.1.3@sha256:ab5cb380e3ff3172d6c8bd2e7cfd31cce977d2881b260e1f5bc089bf0b759b43}
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    configs:
+      - source: grafana_prometheus_datasource
+        target: /etc/grafana/provisioning/datasources/prometheus.yml
+      - source: grafana_dashboards_provider
+        target: /etc/grafana/provisioning/dashboards/dashboards.yml
+      - source: grafana_config_sync_dashboard
+        target: /var/lib/grafana/dashboards/prometheus-config-sync.json
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+  smoke-test:
+    image: ${SMOKE_TEST_IMAGE:-prometheus-config-sync-smoke-test}
+    build:
+      context: .
+      dockerfile: test/smoke/Dockerfile
+    profiles: [smoke]
+    depends_on:
+      config-sync:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+      grafana:
+        condition: service_started
+    environment:
+      SMOKE_TIMEOUT: ${SMOKE_TIMEOUT:-60}
+      SMOKE_SCENARIO: ${SMOKE_SCENARIO:-basic}
+      SMOKE_SYNC_URL: http://config-sync:9534
+      SMOKE_SOURCE_URL: http://source:9876
+      SMOKE_PROMETHEUS_URL: http://prometheus:9090
+      SMOKE_GRAFANA_URL: http://grafana:3000
+      SMOKE_GENERATED_DIR: /generated
+    volumes:
+      - prometheus_generated:/generated:ro
+
+configs:
+  prometheus_base_config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+
+      scrape_configs:
+        - job_name: prometheus
+          static_configs:
+            - targets: ["prometheus:9090"]
+        - job_name: prometheus-config-source
+          static_configs:
+            - targets: ["source:9876"]
+        - job_name: prometheus-config-sync
+          static_configs:
+            - targets: ["config-sync:9534"]
+
+      scrape_config_files:
+        - /etc/prometheus/generated/scrape-configs*.yml
+
+      rule_files:
+        - /etc/prometheus/rules/prometheus-config-sync.yml
+        - /etc/prometheus/generated/rules/*.yml
+
+  grafana_prometheus_datasource:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus:9090
+          isDefault: true
+          editable: false
+  grafana_dashboards_provider:
+    content: |
+      apiVersion: 1
+      providers:
+        - name: Prometheus Config Sync
+          orgId: 1
+          folder: Prometheus
+          type: file
+          disableDeletion: true
+          editable: false
+          updateIntervalSeconds: 30
+          options:
+            path: /var/lib/grafana/dashboards
+  grafana_config_sync_dashboard:
+    file: ./examples/grafana/prometheus-config-sync-dashboard.json
+  prometheus_config_sync_alerts:
+    file: ./examples/prometheus/alerts/prometheus-config-sync.yml
+
+volumes:
+  prometheus_data:
+  prometheus_generated:
