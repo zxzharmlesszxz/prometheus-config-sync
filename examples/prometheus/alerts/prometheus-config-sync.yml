@@ -1,0 +1,103 @@
+groups:
+  - name: prometheus-config-sync.recording
+    interval: 1m
+    rules:
+      - record: job:prometheus_config_sync_syncs:rate5m
+        expr: sum by (job) (rate(prometheus_config_sync_syncs_total[5m]))
+      - record: job:prometheus_config_sync_sync_failures:rate5m
+        expr: sum by (job) (rate(prometheus_config_sync_sync_failures_total[5m]))
+      - record: job:prometheus_config_sync_reloads:rate5m
+        expr: sum by (job) (rate(prometheus_config_sync_reloads_total[5m]))
+      - record: job:prometheus_config_sync_changes:rate5m
+        expr: sum by (job) (rate(prometheus_config_sync_changes_total[5m]))
+      - record: job_stage:prometheus_config_sync_sync_errors:rate5m
+        expr: sum by (job, stage) (rate(prometheus_config_sync_sync_errors_total[5m]))
+      - record: job:prometheus_config_sync_sync_staleness_seconds
+        expr: time() - prometheus_config_sync_last_success_timestamp_seconds
+
+  - name: prometheus-config-sync.alerts
+    interval: 1m
+    rules:
+      - alert: PrometheusConfigSyncDown
+        expr: up{job="prometheus-config-sync"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: prometheus-config-sync is down
+          description: prometheus-config-sync has not been scrapeable for more than 2 minutes.
+
+      - alert: PrometheusConfigSyncAbsent
+        expr: absent(up{job="prometheus-config-sync"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: prometheus-config-sync target is absent
+          description: No prometheus-config-sync instance has been visible to Prometheus for more than 2 minutes.
+
+      - alert: PrometheusConfigSyncUnhealthy
+        expr: prometheus_config_sync_healthy{job="prometheus-config-sync"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: prometheus-config-sync is unhealthy
+          description: The latest synchronization attempt has been failing for more than 2 minutes.
+
+      - alert: PrometheusConfigSyncNoSuccessfulSync
+        expr: prometheus_config_sync_last_success_timestamp_seconds{job="prometheus-config-sync"} == 0 or (time() - prometheus_config_sync_last_success_timestamp_seconds{job="prometheus-config-sync"} > 300)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: prometheus-config-sync has not synced successfully
+          description: No successful sync has been observed in the last 5 minutes.
+
+      - alert: PrometheusConfigSyncNoRecentReloadAfterChange
+        expr: |
+          time() - prometheus_config_sync_last_change_timestamp_seconds{job="prometheus-config-sync"} > 300
+          and
+          prometheus_config_sync_last_change_timestamp_seconds{job="prometheus-config-sync"} > prometheus_config_sync_last_reload_timestamp_seconds{job="prometheus-config-sync"}
+          and
+          prometheus_config_sync_last_success_timestamp_seconds{job="prometheus-config-sync"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: prometheus-config-sync hasn't reloaded Prometheus after config change
+          description: Prometheus has not been reloaded in the last 5 minutes after successful sync output changes.
+
+      - alert: PrometheusConfigSyncErrors
+        expr: job_stage:prometheus_config_sync_sync_errors:rate5m{job="prometheus-config-sync"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: prometheus-config-sync reports {{ $labels.stage }} errors
+          description: At least one synchronization error occurred at the {{ $labels.stage }} stage during the last 5 minutes.
+
+      - alert: PrometheusConfigSyncUnrecoveredFailure
+        expr: |
+          prometheus_config_sync_last_failure_timestamp_seconds{job="prometheus-config-sync"} >
+          prometheus_config_sync_last_success_timestamp_seconds{job="prometheus-config-sync"}
+          and
+          prometheus_config_sync_last_failure_timestamp_seconds{job="prometheus-config-sync"} > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: prometheus-config-sync reports an unrecovered failure
+          description: A failed sync timestamp is newer than the last successful sync for at least 1 minute.
+
+      - alert: PrometheusConfigSyncStaleSync
+        expr: |
+          job:prometheus_config_sync_sync_staleness_seconds{job="prometheus-config-sync"} > 1800
+          and
+          prometheus_config_sync_last_success_timestamp_seconds{job="prometheus-config-sync"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus config sync output is stale
+          description: The service has not completed a successful synchronization for more than 30 minutes.
