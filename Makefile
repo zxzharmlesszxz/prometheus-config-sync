@@ -1,6 +1,6 @@
 include Makefile.mk
 
-.PHONY: help fmt fmt-check tidy tidy-check mod-download build vet lint lint-version actionlint shellcheck python-check dashboard-check govulncheck gosec security-go test test-race coverage coverage-check release-archives release-checksums release release-smoke docker-build docker-build-alpine docker-build-bookworm docker-build-trixie docker-build-comparison docker-check docker-runtime-smoke docker-smoke docker-buildx docker-buildx-push docker-push compose compose-up compose-down compose-logs compose-ps compose-config compose-smoke http-smoke smoke-fixtures smoke-up smoke-test smoke-change-test smoke-failure-test smoke-validation-test smoke-reload-retry-test smoke-restart-test smoke-runtime-compat-test smoke-resource-test smoke-runtime-test smoke-log-test smoke-fatal-log-test smoke-startup-signal-test smoke-logs smoke-down smoke smoke-compatibility prometheus-config-check prometheus-rules-check helm-lint helm-template-check helm-package check full-check ci clean size
+.PHONY: help fmt fmt-check tidy tidy-check mod-download build vet lint lint-install lint-version actionlint shellcheck python-check dashboard-check govulncheck gosec security-go test test-race coverage coverage-check release-archives release-checksums release release-smoke docker-build docker-build-alpine docker-build-bookworm docker-build-trixie docker-build-comparison docker-check docker-runtime-smoke docker-smoke docker-buildx docker-buildx-push docker-push compose compose-up compose-down compose-logs compose-ps compose-config compose-smoke http-smoke smoke-fixtures smoke-up smoke-test smoke-change-test smoke-failure-test smoke-validation-test smoke-reload-retry-test smoke-restart-test smoke-runtime-compat-test smoke-resource-test smoke-runtime-test smoke-log-test smoke-fatal-log-test smoke-startup-signal-test smoke-logs smoke-down smoke smoke-compatibility prometheus-config-check prometheus-rules-check helm-lint helm-template-check helm-package check full-check ci clean size
 .SILENT: compose compose-config compose-down compose-logs compose-ps compose-up size
 .NOTPARALLEL: full-check ci release release-smoke
 
@@ -31,7 +31,10 @@ build: ## Build the service binary into dist/.
 vet: ## Run go vet.
 	$(GO) vet ./...
 
-lint-version: ## Require the project golangci-lint version.
+lint-install: ## Install the project-pinned golangci-lint version with the active Go toolchain.
+	$(GO) install $(GOLANGCI_LINT_MODULE)/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+lint-version: ## Require the project golangci-lint version and build toolchain.
 	@version="$$($(GOLANGCI_LINT) version)"; \
 	echo "$$version" | grep -F "version $(patsubst v%,%,$(GOLANGCI_LINT_VERSION)) " >/dev/null || { echo "required golangci-lint $(GOLANGCI_LINT_VERSION), got: $$version"; exit 1; }; \
 	echo "$$version" | grep -F "built with go$(GO_VERSION) " >/dev/null || { echo "required golangci-lint built with go$(GO_VERSION), got: $$version"; exit 1; }

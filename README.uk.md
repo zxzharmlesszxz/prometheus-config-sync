@@ -28,6 +28,7 @@ make help
 make build
 make test
 make test-race
+make lint-install
 make check
 make full-check
 make ci
@@ -42,10 +43,9 @@ make ci
 - `make ci` додає security scans, Docker smoke типового image і повний
   локальний black-box suite.
 
-Для локального запуску потрібні `golangci-lint` v2.12.2, зібраний Go 1.27.0,
+Для локального запуску потрібні `golangci-lint` v2.13.1, зібраний Go 1.27.0,
 Docker із Compose v2, Helm, ShellCheck, jq, Python 3 та actionlint. GitHub Actions
-сам готує Go/Helm
-toolchains і запускає ту саму pinned версію golangci-lint.
+сам готує Go/Helm toolchains і використовує ту саму pinned версію golangci-lint.
 Для повного локального parity додайте доступ до Docker socket для image/build
 цілей та writable кеш `golangci-lint` (через `GOLANGCI_LINT_CACHE` або еквівалент).
 

@@ -30,6 +30,7 @@ make help
 make build
 make test
 make test-race
+make lint-install
 make check
 make full-check
 make ci
@@ -44,10 +45,10 @@ The validation ladder is cumulative:
 - `make ci` adds security scans, default-image Docker smoke, and the complete
   local black-box suite.
 
-Local execution expects `golangci-lint` v2.12.2 built with Go 1.27.0, Docker
+Local execution expects `golangci-lint` v2.13.1 built with Go 1.27.0, Docker
 with Compose v2, Helm, ShellCheck, jq, Python 3, and actionlint to be available.
-GitHub Actions provisions
-its own Go and Helm toolchains and runs the same pinned golangci-lint version.
+GitHub Actions provisions its own Go and Helm toolchains and uses the same
+pinned golangci-lint version.
 For full local parity, keep a writable `golangci-lint` cache (set via `GOLANGCI_LINT_CACHE` or equivalent) and Docker socket access for image/build targets.
 
 The binary is written to `dist/prometheus-config-sync`:
