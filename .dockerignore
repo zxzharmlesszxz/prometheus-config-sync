@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.cache
+dist
+tmp
+coverage.out
+coverage.txt
+__pycache__/
+*.py[cod]
+*.iml
+.DS_Store

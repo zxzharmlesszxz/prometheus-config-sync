@@ -1,0 +1,26 @@
+.idea/
+.vscode/
+.DS_Store
+.cache/
+tmp/
+
+# Build outputs
+/prometheus-config-sync
+*.test
+*.out
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go workspace file
+go.work
+
+# Generated project artifacts
+/dist/
+/coverage.out
+/coverage.txt
+/.env
+__pycache__/
+*.py[cod]

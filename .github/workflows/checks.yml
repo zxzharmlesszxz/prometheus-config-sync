@@ -1,0 +1,157 @@
+---
+name: Checks
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        type: string
+        default: "1.26.6"
+      run-build:
+        type: boolean
+        default: false
+      check-compose:
+        type: boolean
+        default: false
+      upload-artifacts:
+        type: boolean
+        default: false
+      release-version:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  go-check:
+    name: Go Check
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: Download modules
+        run: make mod-download
+      - name: Formatting
+        run: make fmt-check
+      - name: Tidy
+        run: make tidy-check
+      - name: Vet
+        run: make vet
+      - name: Lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          version: v2.12.2
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
+      - name: Delivery source checks
+        run: make actionlint shellcheck python-check dashboard-check
+      - name: Coverage
+        run: make coverage-check
+
+  race:
+    name: Race Tests
+    runs-on: ubuntu-24.04
+    needs: go-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: Race tests
+        run: make test-race
+
+  delivery-check:
+    name: Delivery Check
+    runs-on: ubuntu-24.04
+    needs: go-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+      - name: Compose configuration
+        if: inputs.check-compose
+        run: make compose-config
+      - name: Helm validation
+        run: make helm-lint
+      - name: Prometheus rules
+        run: make prometheus-rules-check
+      - name: Dockerfile static checks
+        run: make docker-check
+      - name: Docker smoke
+        run: make docker-smoke DOCKER_IMAGE=prometheus-config-sync:ci
+      - name: Local black-box smoke
+        if: inputs.check-compose
+        run: make smoke
+      - name: Local smoke diagnostics
+        if: failure() && inputs.check-compose
+        run: docker compose ps && docker compose logs --no-color
+      - name: Local smoke cleanup
+        if: always() && inputs.check-compose
+        run: make smoke-down
+      - name: Release smoke
+        if: inputs.run-build
+        env:
+          RELEASE_VERSION: ${{ inputs.release-version }}
+        run: make release-smoke ${RELEASE_VERSION:+VERSION="$RELEASE_VERSION"}
+      - name: Helm package
+        if: inputs.run-build
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release-version }}
+        run: |
+          if [[ -n "$RELEASE_VERSION" ]]; then
+            make helm-package CHART_VERSION="${RELEASE_VERSION#v}" APP_VERSION="$RELEASE_VERSION"
+          else
+            make helm-package
+          fi
+      - name: Upload release artifacts
+        if: inputs.upload-artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-artifacts
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/charts/*.tgz
+          if-no-files-found: error
+
+  security:
+    name: Security
+    runs-on: ubuntu-24.04
+    needs: go-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: Go security scans
+        run: make security-go
+      - name: Repository scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig,license
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

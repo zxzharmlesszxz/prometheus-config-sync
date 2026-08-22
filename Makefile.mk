@@ -1,0 +1,64 @@
+GO ?= go
+GOFMT ?= gofmt
+GOLANGCI_LINT ?= golangci-lint
+GOLANGCI_LINT_VERSION ?= v2.12.2
+GOVULNCHECK_VERSION ?= v1.6.0
+GOSEC_VERSION ?= v2.28.0
+DOCKER ?= docker
+DOCKER_COMPOSE ?= $(DOCKER) compose
+HELM ?= helm
+CURL ?= curl
+ACTIONLINT ?= actionlint
+SHELLCHECK ?= shellcheck
+PYTHON ?= python3
+JQ ?= jq
+PROMTOOL_IMAGE ?= prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69
+
+PROJECT_NAME ?= prometheus-config-sync
+MAIN_PACKAGE ?= ./cmd/prometheus-config-sync
+DIST_DIR ?= dist
+BUILD_OUTPUT ?= $(DIST_DIR)/$(PROJECT_NAME)
+CHART_DIR ?= deploy/prometheus-config-sync
+CHART_DIST_DIR ?= $(DIST_DIR)/charts
+CHART_VERSION ?=
+APP_VERSION ?=
+CGO_ENABLED ?= 0
+
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+VCS_REF ?= $(shell git rev-parse --verify HEAD 2>/dev/null || echo unknown)
+BRANCH ?= $(shell git symbolic-ref --short -q HEAD 2>/dev/null || echo unknown)
+BUILD_USER ?= make
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+VERSION_LDFLAGS ?= -X github.com/prometheus/common/version.Version=$(VERSION) -X github.com/prometheus/common/version.Revision=$(VCS_REF) -X github.com/prometheus/common/version.Branch=$(BRANCH) -X github.com/prometheus/common/version.BuildUser=$(BUILD_USER) -X github.com/prometheus/common/version.BuildDate=$(BUILD_DATE)
+LDFLAGS ?= -s -w $(VERSION_LDFLAGS)
+IMAGE_TAG ?= $(VERSION)
+IMAGE_SOURCE ?= https://github.com/zxzharmlesszxz/prometheus-config-sync
+DOCKER_IMAGE ?= $(PROJECT_NAME):$(IMAGE_TAG)
+DOCKER_ALPINE_IMAGE ?= $(PROJECT_NAME):alpine
+DOCKER_BOOKWORM_IMAGE ?= $(PROJECT_NAME):bookworm-slim
+DOCKER_TRIXIE_IMAGE ?= $(PROJECT_NAME):trixie-slim
+ALPINE_RUNTIME_IMAGE ?= alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+BOOKWORM_RUNTIME_IMAGE ?= debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+TRIXIE_RUNTIME_IMAGE ?= debian:trixie-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
+RUNTIME_IMAGE ?= $(ALPINE_RUNTIME_IMAGE)
+RUNTIME_FAMILY ?= alpine
+DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
+PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
+
+COVERAGE_PROFILE ?= coverage.out
+COVERAGE_REPORT ?= coverage.txt
+COVERAGE_THRESHOLD ?= 60.0
+GO_FILES ?= $(shell find . -name '*.go' -not -path './vendor/*' -not -path './dist/*')
+
+COMPOSE_ARGS ?= up --build
+SMOKE_BASE_URL ?= http://127.0.0.1:9534
+PROMETHEUS_BASE_URL ?= http://127.0.0.1:9090
+SMOKE_TEST_IMAGE ?= prometheus-config-sync-smoke-test
+SMOKE_APP_IMAGE ?= prometheus-config-sync:local
+SMOKE_TIMEOUT ?= 60
+SMOKE_INTERVAL ?= 2s
+SMOKE_REQUIRE_RELOAD ?= true
+SMOKE_MAX_IDLE_PROCESSES ?= 8
+SMOKE_MAX_PID1_FDS ?= 64
+PYTHON_FILES ?= test/smoke/source.py test/smoke/smoke.py
+SHELL_FILES ?= scripts/helm-template-check.sh
