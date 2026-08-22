@@ -1,0 +1,12 @@
+prometheus-config-sync is installed as a single writer.
+
+Generated files are written to PVC {{ include "prometheus-config-sync.claimName" . }} at
+{{ .Values.config.outputDir }}. Mount the same claim read-only into Prometheus and configure:
+
+scrape_config_files:
+  - {{ .Values.config.outputDir }}/scrape-configs*.yml
+rule_files:
+  - {{ .Values.config.outputDir }}/rules/*.yml
+
+Preserve {{ .Values.config.outputDir }}/.prometheus-config-sync-applied.sha256
+across config-sync restarts. It records the generation successfully reloaded by Prometheus.

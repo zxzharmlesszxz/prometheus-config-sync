@@ -1,0 +1,22 @@
+image:
+  repository: prometheus-config-sync
+  tag: local
+  pullPolicy: Never
+
+config:
+  sourceURL: http://prometheus-config-source:9876
+  prometheusReloadURL: http://prometheus:9090/-/reload
+  interval: 15s
+  logLevel: debug
+
+persistence:
+  create: true
+  accessModes:
+    - ReadWriteOnce
+  size: 256Mi
+
+serviceMonitor:
+  enabled: false
+
+prometheusRule:
+  enabled: false

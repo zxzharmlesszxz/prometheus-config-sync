@@ -1,0 +1,110 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "prometheus-config-sync.fullname" . }}
+  namespace: {{ default .Release.Namespace .Values.prometheusRule.namespace }}
+  labels:
+    {{- include "prometheus-config-sync.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: prometheus-config-sync.recording
+      interval: 1m
+      rules:
+        - record: job:prometheus_config_sync_syncs:rate5m
+          expr: sum by (job) (rate(prometheus_config_sync_syncs_total{job=~".*prometheus-config-sync.*"}[5m]))
+        - record: job:prometheus_config_sync_sync_failures:rate5m
+          expr: sum by (job) (rate(prometheus_config_sync_sync_failures_total{job=~".*prometheus-config-sync.*"}[5m]))
+        - record: job:prometheus_config_sync_reloads:rate5m
+          expr: sum by (job) (rate(prometheus_config_sync_reloads_total{job=~".*prometheus-config-sync.*"}[5m]))
+        - record: job:prometheus_config_sync_changes:rate5m
+          expr: sum by (job) (rate(prometheus_config_sync_changes_total{job=~".*prometheus-config-sync.*"}[5m]))
+        - record: job_stage:prometheus_config_sync_sync_errors:rate5m
+          expr: sum by (job, stage) (rate(prometheus_config_sync_sync_errors_total{job=~".*prometheus-config-sync.*"}[5m]))
+        - record: job:prometheus_config_sync_sync_staleness_seconds
+          expr: time() - prometheus_config_sync_last_success_timestamp_seconds{job=~".*prometheus-config-sync.*"}
+    - name: prometheus-config-sync.alerts
+      interval: 1m
+      rules:
+        - alert: PrometheusConfigSyncDown
+          expr: up{job=~".*prometheus-config-sync.*"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "prometheus-config-sync target is down"
+            description: "Prometheus cannot scrape {{ "{{ $labels.instance }}" }}."
+        - alert: PrometheusConfigSyncAbsent
+          expr: absent(up{job=~".*prometheus-config-sync.*"})
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "prometheus-config-sync targets are absent"
+            description: "No prometheus-config-sync instance has been visible to Prometheus for more than 2 minutes."
+        - alert: PrometheusConfigSyncUnhealthy
+          expr: prometheus_config_sync_healthy{job=~".*prometheus-config-sync.*"} == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "prometheus-config-sync is unhealthy"
+            description: "The latest synchronization attempt has been failing for more than 2 minutes."
+        - alert: PrometheusConfigSyncNoSuccessfulSync
+          expr: >-
+            prometheus_config_sync_last_success_timestamp_seconds{job=~".*prometheus-config-sync.*"} == 0
+            or
+            (time() - prometheus_config_sync_last_success_timestamp_seconds{job=~".*prometheus-config-sync.*"} > {{ .Values.prometheusRule.maxSyncAgeSeconds }})
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "prometheus-config-sync has no recent successful sync"
+            description: "The last successful sync is older than the configured maximum age."
+        - alert: PrometheusConfigSyncNoRecentReloadAfterChange
+          expr: >-
+            time() - prometheus_config_sync_last_change_timestamp_seconds{job=~".*prometheus-config-sync.*"} > {{ .Values.prometheusRule.maxSyncAgeSeconds }}
+            and
+            prometheus_config_sync_last_change_timestamp_seconds{job=~".*prometheus-config-sync.*"} > prometheus_config_sync_last_reload_timestamp_seconds{job=~".*prometheus-config-sync.*"}
+            and
+            prometheus_config_sync_last_success_timestamp_seconds{job=~".*prometheus-config-sync.*"} > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "prometheus-config-sync has not reloaded Prometheus after a config change"
+            description: "Prometheus has not been reloaded after the latest published generated configuration change."
+        - alert: PrometheusConfigSyncErrors
+          expr: job_stage:prometheus_config_sync_sync_errors:rate5m > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "prometheus-config-sync reports {{ "{{ $labels.stage }}" }} errors"
+            description: "At least one synchronization error occurred at the {{ "{{ $labels.stage }}" }} stage during the last 5 minutes."
+        - alert: PrometheusConfigSyncUnrecoveredFailure
+          expr: >-
+            prometheus_config_sync_last_failure_timestamp_seconds{job=~".*prometheus-config-sync.*"} > prometheus_config_sync_last_success_timestamp_seconds{job=~".*prometheus-config-sync.*"}
+            and
+            prometheus_config_sync_last_failure_timestamp_seconds{job=~".*prometheus-config-sync.*"} > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "prometheus-config-sync reports an unrecovered failure"
+            description: "A failed sync timestamp is newer than the last successful sync for at least 1 minute."
+        - alert: PrometheusConfigSyncStaleSync
+          expr: >-
+            job:prometheus_config_sync_sync_staleness_seconds > {{ .Values.prometheusRule.criticalSyncAgeSeconds }}
+            and
+            prometheus_config_sync_last_success_timestamp_seconds{job=~".*prometheus-config-sync.*"} > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "prometheus-config-sync synchronization is critically stale"
+            description: "The service has exceeded the configured critical successful-sync age."
+{{- end }}

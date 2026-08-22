@@ -1,0 +1,119 @@
+{{- include "prometheus-config-sync.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "prometheus-config-sync.fullname" . }}
+  labels:
+    {{- include "prometheus-config-sync.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "prometheus-config-sync.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "prometheus-config-sync.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- $sourceSecretChecksum := "" }}
+        {{- if .Values.sourceAuth.create }}
+        {{- $sourceSecretChecksum = include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- else if .Values.sourceAuth.rolloutChecksum }}
+        {{- $sourceSecretChecksum = .Values.sourceAuth.rolloutChecksum | quote }}
+        {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if ne $sourceSecretChecksum "" }}
+        checksum/source-secret: {{ $sourceSecretChecksum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "prometheus-config-sync.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: prometheus-config-sync
+          image: "{{ .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ default .Chart.AppVersion .Values.image.tag }}{{ end }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - --log.level={{ .Values.config.logLevel }}
+            {{- range .Values.config.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "prometheus-config-sync.fullname" . }}
+          {{- if or .Values.sourceAuth.create .Values.sourceAuth.existingSecret }}
+          env:
+            - name: PROMETHEUS_CONFIG_SYNC_SOURCE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (include "prometheus-config-sync.fullname" .) .Values.sourceAuth.existingSecret }}
+                  key: {{ .Values.sourceAuth.existingSecretKey | quote }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 9534
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: metrics
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: generated
+              mountPath: {{ .Values.config.outputDir }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: generated
+          persistentVolumeClaim:
+            claimName: {{ include "prometheus-config-sync.claimName" . }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}

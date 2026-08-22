@@ -1,0 +1,122 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/zxzharmlesszxz/prometheus-config-sync
+  pullPolicy: IfNotPresent
+  tag: ""
+  digest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true
+
+config:
+  # Runtime settings are delivered through the chart-managed ConfigMap; extraArgs is only for unmanaged flags.
+  sourceURL: http://prometheus-config-source:9876
+  prometheusReloadURL: http://prometheus:9090/-/reload
+  outputDir: /etc/prometheus/generated
+  promtoolPath: /usr/local/bin/promtool
+  interval: 30s
+  httpTimeout: 10s
+  validationTimeout: 30s
+  maxConfigBytes: 10485760
+  maxRulesBytes: 10485760
+  metricsPath: /metrics
+  listenAddress: :9534
+  logLevel: info
+  extraArgs: []
+
+sourceAuth:
+  create: false
+  token: ""
+  existingSecret: ""
+  existingSecretKey: source-token
+  rolloutChecksum: ""
+
+service:
+  type: ClusterIP
+  port: 9534
+  annotations: {}
+
+persistence:
+  enabled: true
+  create: true
+  existingClaim: ""
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+  size: 1Gi
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+probes:
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 2
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  labels: {}
+  interval: 30s
+  scrapeTimeout: 10s
+
+prometheusRule:
+  enabled: false
+  namespace: ""
+  labels: {}
+  maxSyncAgeSeconds: 300
+  criticalSyncAgeSeconds: 1800
+
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []
+
+podDisruptionBudget:
+  enabled: false
+  maxUnavailable: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+terminationGracePeriodSeconds: 10

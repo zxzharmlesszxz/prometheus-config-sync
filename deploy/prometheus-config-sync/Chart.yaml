@@ -1,0 +1,12 @@
+apiVersion: v2
+name: prometheus-config-sync
+description: Synchronize generated Prometheus scrape configuration and rule files
+type: application
+version: 0.1.0
+appVersion: "v0.1.0"
+kubeVersion: ">=1.27.0-0"
+home: https://github.com/zxzharmlesszxz/prometheus-config-sync
+sources:
+  - https://github.com/zxzharmlesszxz/prometheus-config-sync
+maintainers:
+  - name: zxzharmlesszxz
